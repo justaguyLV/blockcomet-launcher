@@ -126,12 +126,7 @@ open(os.path.join(res, "values", "blockcomet_skin_perf.xml"), "w", encoding="utf
 open(os.path.join(res, "values-ar", "blockcomet_skin_perf.xml"), "w", encoding="utf-8").write(ar)
 
 # ---- Skin button: a pixel head instead of the pencil (the pencil is still used for other things) -----------------------
-open(os.path.join(res, "drawable", "ic_px_skin.xml"), "w", encoding="utf-8").write(
-    '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:height="32dp" android:viewportHeight="24" '
-    'android:viewportWidth="24" android:width="32dp">\n'
-    '    <path android:fillColor="?attr/colorOnSurface" android:fillType="evenOdd" '
-    'android:pathData="M4,4h16v16H4z M6,12h4v2H6z M14,12h4v2h-4z M8,16h8v2H8z"/>\n'
-    '</vector>\n')
+open(os.path.join(res, "drawable", "ic_px_skin.xml"), "w", encoding="utf-8").write("<vector xmlns:android=\"http://schemas.android.com/apk/res/android\" android:height=\"32dp\" android:viewportHeight=\"24\" android:viewportWidth=\"24\" android:width=\"32dp\">\n    <path android:fillColor=\"#4A2F1B\" android:pathData=\"M4,4h16v2h-16z M4,6h16v2h-16z M4,8h2v2h-2z M18,8h2v2h-2z\"/>\n    <path android:fillColor=\"#D9A47A\" android:pathData=\"M6,8h12v2h-12z M4,10h16v2h-16z M4,12h2v2h-2z M10,12h4v2h-4z M18,12h2v2h-2z M4,14h6v2h-6z M14,14h6v2h-6z M4,16h4v2h-4z M16,16h4v2h-4z M4,18h16v2h-16z\"/>\n    <path android:fillColor=\"#B97F58\" android:pathData=\"M10,14h4v2h-4z\"/>\n    <path android:fillColor=\"#FFFFFF\" android:pathData=\"M6,12h2v2h-2z M16,12h2v2h-2z\"/>\n    <path android:fillColor=\"#5B3FA0\" android:pathData=\"M8,12h2v2h-2z M14,12h2v2h-2z\"/>\n    <path android:fillColor=\"#7A4B35\" android:pathData=\"M8,16h8v2h-8z\"/>\n</vector>\n")
 patch(os.path.join(res, "layout", "item_account.xml"), [(
     'android:contentDescription="@string/skin_editor_edit_button"\n        android:src="@drawable/ic_px_edit"',
     'android:contentDescription="@string/skin_editor_edit_button"\n        android:src="@drawable/ic_px_skin"')])
