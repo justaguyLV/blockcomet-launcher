@@ -124,4 +124,16 @@ ar = '''<?xml version="1.0" encoding="utf-8"?>
 os.makedirs(os.path.join(res, "values-ar"), exist_ok=True)
 open(os.path.join(res, "values", "blockcomet_skin_perf.xml"), "w", encoding="utf-8").write(en)
 open(os.path.join(res, "values-ar", "blockcomet_skin_perf.xml"), "w", encoding="utf-8").write(ar)
+
+# ---- Skin button: a pixel head instead of the pencil (the pencil is still used for other things) -----------------------
+open(os.path.join(res, "drawable", "ic_px_skin.xml"), "w", encoding="utf-8").write(
+    '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:height="32dp" android:viewportHeight="24" '
+    'android:viewportWidth="24" android:width="32dp">\n'
+    '    <path android:fillColor="?attr/colorOnSurface" android:fillType="evenOdd" '
+    'android:pathData="M4,4h16v16H4z M6,12h4v2H6z M14,12h4v2h-4z M8,16h8v2H8z"/>\n'
+    '</vector>\n')
+patch(os.path.join(res, "layout", "item_account.xml"), [(
+    'android:contentDescription="@string/skin_editor_edit_button"\n        android:src="@drawable/ic_px_edit"',
+    'android:contentDescription="@string/skin_editor_edit_button"\n        android:src="@drawable/ic_px_skin"')])
+
 print("localskin: done")
