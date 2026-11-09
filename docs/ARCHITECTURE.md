@@ -13,6 +13,8 @@ copper-custom/
   look_share.py       "Share my look" entries
   hotbar.py           hotbar touch-area fix and diagnostic overlay
   rtlfix.py           right-to-left fixes (account name, settings button)
+  chat.py             BlockComet Chat: friends + DMs + server invites (WebView + PocketBase), see docs/CHAT.md
+  chat_web/           the chat page itself (HTML/JS, PocketBase JS SDK) + pb_schema.json to import
   translate_ar.py     Arabic text for strings Copper ships without it
   gen_notices.py      notices generated from the bundled mods
   build-mods.sh       Fabric Loader, Fabric API, Meteor and performance mods per Minecraft version

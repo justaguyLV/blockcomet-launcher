@@ -555,6 +555,9 @@ python3 "$HERE/look_share.py" "$RES" "$JAVA" "$HERE"
 # 11c. Hotbar touch area fix + diagnostic overlay
 python3 "$HERE/hotbar.py" "$RES" "$JAVA"
 
+# 11d. BlockComet Chat: friends + DMs + server invites, WebView over a self-hosted PocketBase server (own module)
+python3 "$HERE/chat.py" "$RES" "$JAVA" "$MANIFEST" "$HERE"
+
 # 12. Arabic text for every string the launcher ships without it
 python3 "$HERE/translate_ar.py" "$RES"
 

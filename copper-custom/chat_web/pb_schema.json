@@ -1,0 +1,33 @@
+[
+  {
+    "name": "friends",
+    "type": "base",
+    "listRule": "requester = @request.auth.id || addressee = @request.auth.id",
+    "viewRule": "requester = @request.auth.id || addressee = @request.auth.id",
+    "createRule": "requester = @request.auth.id",
+    "updateRule": "requester = @request.auth.id || addressee = @request.auth.id",
+    "deleteRule": "requester = @request.auth.id || addressee = @request.auth.id",
+    "schema": [
+      { "name": "requester", "type": "relation", "required": true, "options": { "collectionId": "_pb_users_auth_", "maxSelect": 1, "cascadeDelete": true } },
+      { "name": "addressee", "type": "relation", "required": true, "options": { "collectionId": "_pb_users_auth_", "maxSelect": 1, "cascadeDelete": true } },
+      { "name": "status", "type": "select", "required": true, "options": { "maxSelect": 1, "values": ["pending", "accepted"] } }
+    ]
+  },
+  {
+    "name": "messages",
+    "type": "base",
+    "listRule": "from = @request.auth.id || to = @request.auth.id",
+    "viewRule": "from = @request.auth.id || to = @request.auth.id",
+    "createRule": "from = @request.auth.id",
+    "updateRule": "",
+    "deleteRule": "from = @request.auth.id",
+    "schema": [
+      { "name": "from", "type": "relation", "required": true, "options": { "collectionId": "_pb_users_auth_", "maxSelect": 1, "cascadeDelete": true } },
+      { "name": "to", "type": "relation", "required": true, "options": { "collectionId": "_pb_users_auth_", "maxSelect": 1, "cascadeDelete": true } },
+      { "name": "body", "type": "text", "required": false },
+      { "name": "type", "type": "select", "required": true, "options": { "maxSelect": 1, "values": ["text", "invite"] } },
+      { "name": "invite_host", "type": "text", "required": false },
+      { "name": "invite_port", "type": "text", "required": false }
+    ]
+  }
+]
