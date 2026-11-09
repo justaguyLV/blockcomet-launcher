@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Prepares, for several Minecraft versions, a ready Fabric setup that the launcher turns into instances on first start:
 #   assets/custom/versions/<fabric-loader-X-GAME>.json      newest stable Fabric Loader for that game version
-#   assets/custom/mods/<GAME>/*.jar                          Fabric API + Meteor Client + performance mods
+#   assets/custom/mods/<GAME>/*.jar                          Fabric API + Meteor Client (installed on first start)
+#   assets/custom/perf/<GAME>/*.jar                          performance mods (installed only if the user turns the option on in the settings)
+#   assets/custom/skin/<GAME>/*.jar                          CustomSkinLoader (installed only when a local account gets a chosen skin)
 # Meteor for 1.20.1-1.21.1 comes from the archive releases (SHA-256 pinned, both mirrors identical); newer versions are
 # tried from Meteor's own snapshot repository and skipped when not available. A version that cannot be completed is skipped.
 #   usage: build-mods.sh <assets-dir>
@@ -29,26 +31,26 @@ warn() { echo "::warning title=BlockComet $1::$2"; }
 
 # install_game <game> <meteor-jar>: loader JSON + Fabric API + performance mods + Meteor. Returns 1 (and cleans up) on failure.
 install_game() {
-  local game="$1" meteor="$2" modsdir="$A/custom/mods/$1" id loader fapi json
-  mkdir -p "$modsdir"
+  local game="$1" meteor="$2" modsdir="$A/custom/mods/$1" perfdir="$A/custom/perf/$1" skindir="$A/custom/skin/$1" id loader fapi json
+  mkdir -p "$modsdir" "$perfdir" "$skindir"
   loader=$(curl -fsSL --retry 3 "https://meta.fabricmc.net/v2/versions/loader/$game" | python3 -c "
 import sys, json
-print(next(v['loader']['version'] for v in json.load(sys.stdin) if v['loader'].get('stable')))") || { warn "$game" "no stable Fabric Loader"; rm -rf "$modsdir"; return 1; }
-  curl -fsSL --retry 3 -o "$WORK/$game.json" "https://meta.fabricmc.net/v2/versions/loader/$game/$loader/profile/json" || { warn "$game" "no loader profile"; rm -rf "$modsdir"; return 1; }
-  id=$(python3 -c "import json;d=json.load(open('$WORK/$game.json'));assert d['inheritsFrom']=='$game';print(d['id'])") || { warn "$game" "bad loader profile"; rm -rf "$modsdir"; return 1; }
+print(next(v['loader']['version'] for v in json.load(sys.stdin) if v['loader'].get('stable')))") || { warn "$game" "no stable Fabric Loader"; rm -rf "$modsdir" "$perfdir" "$skindir"; return 1; }
+  curl -fsSL --retry 3 -o "$WORK/$game.json" "https://meta.fabricmc.net/v2/versions/loader/$game/$loader/profile/json" || { warn "$game" "no loader profile"; rm -rf "$modsdir" "$perfdir" "$skindir"; return 1; }
+  id=$(python3 -c "import json;d=json.load(open('$WORK/$game.json'));assert d['inheritsFrom']=='$game';print(d['id'])") || { warn "$game" "bad loader profile"; rm -rf "$modsdir" "$perfdir" "$skindir"; return 1; }
 
   local M=https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api
   fapi=$(curl -fsSL --retry 3 "$M/maven-metadata.xml" | grep -o "<version>[^<]*+$game</version>" | sed 's/<[^>]*>//g' | sort -V | tail -1)
-  [ -n "$fapi" ] || { warn "$game" "no Fabric API"; rm -rf "$modsdir"; return 1; }
+  [ -n "$fapi" ] || { warn "$game" "no Fabric API"; rm -rf "$modsdir" "$perfdir" "$skindir"; return 1; }
   curl -fsSL --retry 3 -o "$modsdir/fabric-api-$fapi.jar" "$M/$fapi/fabric-api-$fapi.jar" \
     && echo "$(curl -fsSL --retry 3 "$M/$fapi/fabric-api-$fapi.jar.sha1")  $modsdir/fabric-api-$fapi.jar" | sha1sum -c - >/dev/null \
-    || { warn "$game" "Fabric API download/verify failed"; rm -rf "$modsdir"; return 1; }
+    || { warn "$game" "Fabric API download/verify failed"; rm -rf "$modsdir" "$perfdir" "$skindir"; return 1; }
 
   cp "$meteor" "$modsdir/$(basename "$meteor")"
 
   # performance mods (not Sodium: its OpenGL needs are risky on phones; chosen not to break Meteor's ESP/X-ray either): optional, newest release for this game version, sha512 checked against Modrinth's API
   local slug
-  for slug in ferrite-core lithium modernfix krypton noisium memoryleakfix scalablelux; do
+  for slug in ferrite-core lithium modernfix krypton noisium memoryleakfix scalablelux customskinloader; do
     (
       set -e
       json=$(curl -fsSL --retry 3 -H "User-Agent: $UA" "https://api.modrinth.com/v2/project/$slug/version?game_versions=%5B%22$game%22%5D&loaders=%5B%22fabric%22%5D")
@@ -58,14 +60,15 @@ versions = json.load(sys.stdin)
 releases = [v for v in versions if v['version_type'] == 'release'] or versions
 f = next(x for x in releases[0]['files'] if x['primary'])
 print(f['url'], f['filename'], f['hashes']['sha512'])")
-      curl -fsSL --retry 3 -o "$modsdir/$name" "$url"
-      echo "$sha512  $modsdir/$name" | sha512sum -c - >/dev/null
+      dest="$perfdir"; [ "$slug" = customskinloader ] && dest="$skindir"
+      curl -fsSL --retry 3 -o "$dest/$name" "$url"
+      echo "$sha512  $dest/$name" | sha512sum -c - >/dev/null
     ) || echo "   (no $slug for $game)"
   done
 
   cp "$WORK/$game.json" "$A/custom/versions/$id.json"
   echo "$id" >> "$A/custom/bundled.txt"
-  echo "== $game: $id, mods: $(ls "$modsdir" | tr '\n' ' ')"
+  echo "== $game: $id, mods: $(ls "$modsdir" | tr '\n' ' ') perf: $(ls "$perfdir" | tr '\n' ' ') skin: $(ls "$skindir" | tr '\n' ' ')"
 }
 
 # 1) pinned releases

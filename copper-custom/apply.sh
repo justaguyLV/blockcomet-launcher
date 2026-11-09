@@ -276,18 +276,45 @@ methods = '''    // ---- BlockComet: bundled Fabric versions and mods (assets/cu
         }
     }
 
-    /** Copy the bundled mods of the instance's game version into its mods directory (never overwrites). */
+    /** Copies the bundled mods of the instance's game version (Fabric API + Meteor Client) into its mods directory. Performance mods only when the user turned that option on in the settings. */
     public static void installBundledMods(git.artdeell.mojo.instances.Instance instance) {
+        installFolders(instance, git.artdeell.mojo.prefs.LauncherPreferences.DEFAULT_PREF.getBoolean("blockcomet_perf_mods", false) ? new String[]{"mods", "perf"} : new String[]{"mods"});
+    }
+
+    /** The skin loader mod, only when the user has chosen a skin for a local account. */
+    public static void installSkinMod(git.artdeell.mojo.instances.Instance instance) {
+        installFolders(instance, new String[]{"skin"});
+    }
+
+    /** Each mod is copied once: a mod the user turned off (.disabled) or deleted is never brought back. */
+    private static void installFolders(git.artdeell.mojo.instances.Instance instance, String[] kinds) {
         Context ctx = sBundleContext;
         if (ctx == null || instance == null || instance.versionId == null) return;
         try {
-            String folder = "custom/mods/" + gameOf(instance.versionId);
-            String[] mods = ctx.getAssets().list(folder);
-            if (mods == null) return;
             File dir = new File(instance.getGameDirectory(), "mods");
-            for (String mod : mods) {
-                Tools.copyAssetFile(ctx, folder + "/" + mod, dir.getAbsolutePath(), false);
+            android.content.SharedPreferences prefs = getBundlePrefs();
+            android.content.SharedPreferences.Editor edit = prefs.edit();
+            for (String kind : kinds) {
+                String folder = "custom/" + kind + "/" + gameOf(instance.versionId);
+                String[] mods = ctx.getAssets().list(folder);
+                if (mods == null) continue;
+                for (String mod : mods) {
+                    File plain = new File(dir, mod);
+                    File off = new File(dir, mod + ".disabled");
+                    String key = "mod_" + plain.getAbsolutePath();
+                    if (off.exists()) {
+                        // The user turned this mod off: keep it off, and remove the copy an older build brought back
+                        if (plain.exists()) plain.delete();
+                        edit.putBoolean(key, true);
+                        continue;
+                    }
+                    if (plain.exists()) { edit.putBoolean(key, true); continue; }
+                    if (prefs.getBoolean(key, false)) continue;
+                    Tools.copyAssetFile(ctx, folder + "/" + mod, dir.getAbsolutePath(), false);
+                    if (plain.exists()) edit.putBoolean(key, true);
+                }
             }
+            edit.apply();
         } catch (IOException e) {
             Log.e("AsyncAssetManager", "Failed to install bundled mods", e);
         }
@@ -530,6 +557,9 @@ python3 "$HERE/hotbar.py" "$RES" "$JAVA"
 
 # 12. Arabic text for every string the launcher ships without it
 python3 "$HERE/translate_ar.py" "$RES"
+
+# 12b. Skins for local accounts, and performance mods only when the user turns them on
+python3 "$HERE/localskin.py" "$RES" "$JAVA" "$HERE"
 
 # 13. Right-to-left layouts (icons and text mirrored in Arabic instead of Arabic text inside a left-to-right layout)
 if ! grep -q 'android:supportsRtl' "$MANIFEST"; then
