@@ -15,15 +15,21 @@ bubble with a button. Settings → Launcher appearance → Chat.
 - `chat.py` wires it into the launcher the same way `studio.py` wires in Color Studio: a settings entry, the
   activity in the manifest, nothing else touched.
 
-## Deploying the server (free)
+## Deploying the server (free, no server of your own needed)
 
-1. Create a PocketBase instance — the easiest free option is Render.com's free web service tier (PocketBase is a
-   single binary; Render's "Deploy from a Docker image" works with the official `ghcr.io/muchobien/pocketbase`
-   image). Fly.io's free allowance also works.
-2. Open its `/_/` admin UI once, create an admin account.
+**Easiest: pockethost.io** — a hosted PocketBase service with a free-forever tier (1 project, fair-use CPU/
+bandwidth/storage, no credit card for the free tier). Zero setup, nothing to deploy or maintain:
+
+1. Sign up at pockethost.io and create a project. You get a URL like `your-project.pockethost.io`.
+2. Open its admin UI (same URL + `/_/`), create an admin account.
 3. Settings → Import collections → paste the contents of `copper-custom/chat_web/pb_schema.json` → Review → Import.
-4. Give your friend group the server's URL. Each person pastes it into the launcher's Chat screen once, then
-   creates a username/password.
+4. Give that URL to your friend group — each person pastes it into the launcher's Chat screen once, then creates
+   a username/password. That's it, no server rented or run by anyone.
+
+**Alternative: self-host it yourself** (more control, more setup) — Render.com's free web service tier or Fly.io's
+free allowance can run the official `ghcr.io/muchobien/pocketbase` Docker image; same import step (3) above.
+Fly.io requires a card on file even for its free allowance; Render's free web tier does not, but its disk is not
+persistent (chat history resets on redeploy) unless you add a paid persistent disk.
 
 ## What's not done yet: direct join
 
