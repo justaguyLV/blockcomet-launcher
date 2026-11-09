@@ -23,6 +23,11 @@ def patch(path, pairs):
 
 # ---- LocalSkins helper -------------------------------------------------------------------------------------------
 shutil.copy(os.path.join(here, "LocalSkins.java"), os.path.join(java, "skins", "LocalSkins.java"))
+shutil.copy(os.path.join(here, "LocalCapes.java"), os.path.join(java, "skins", "LocalCapes.java"))
+capes_dir = os.path.join(res, "..", "assets", "custom", "capes")
+os.makedirs(capes_dir, exist_ok=True)
+for name in ("phoenix", "void", "crown"):
+    shutil.copy(os.path.join(here, "capes", name + ".png"), os.path.join(capes_dir, name + ".png"))
 
 # ---- SkinLibrary: separate selection per local account name ------------------------------------------------------
 patch(os.path.join(java, "skins", "SkinLibrary.java"), [(
@@ -48,8 +53,18 @@ patch(os.path.join(java, "..", "..", "..", "com", "kdt", "mcgui", "AccountSpinne
     "            if(account.authType == AuthType.MICROSOFT) {\n                editButton.setVisibility(View.VISIBLE);",
     "            if(account.authType == AuthType.MICROSOFT || account.authType == AuthType.LOCAL) {\n                editButton.setVisibility(View.VISIBLE);")])
 
-# ---- Skin editor --------------------------------------------------------------------------------------------------
+# ---- Skin editor ---------------------------------------------------------------------------------------------------
 patch(os.path.join(java, "skins", "SkinEditorFragment.java"), [
+    # a private pick launcher for capes, next to the skin one
+    ("    private final ActivityResultLauncher<String> mPickSkin =\n"
+     "            registerForActivityResult(new ActivityResultContracts.GetContent(), this::onSkinPicked);\n",
+     "    private final ActivityResultLauncher<String> mPickSkin =\n"
+     "            registerForActivityResult(new ActivityResultContracts.GetContent(), this::onSkinPicked);\n"
+     "    private final ActivityResultLauncher<String> mPickCape =\n"
+     "            registerForActivityResult(new ActivityResultContracts.GetContent(), this::onCapePicked);\n"),
+    ("        final String seedName = getString(R.string.skin_editor_current_skin);\n        beginBusy();",
+     "        final String seedName = getString(R.string.skin_editor_current_skin);\n"
+     "        final Context appCtx = requireContext().getApplicationContext();\n        beginBusy();"),
     ("""                if (result.account == null || result.account.authType != AuthType.MICROSOFT) {
                     result.notMicrosoft = true;
                 } else {
@@ -58,21 +73,23 @@ patch(os.path.join(java, "skins", "SkinEditorFragment.java"), [
      """                if (result.account == null || (result.account.authType != AuthType.MICROSOFT && result.account.authType != AuthType.LOCAL)) {
                     result.notMicrosoft = true;
                 } else if (result.account.authType == AuthType.LOCAL) {
-                    // Local account: only the local library, nothing to download
+                    // Local account: the local skin library and the local capes, nothing to download
                     result.skins = SkinLibrary.list();
                     result.selectedSkinId = SkinLibrary.getSelected(SkinLibrary.localKey(result.account.username));
+                    String selectedCape = SkinLibrary.getSelected(LocalCapes.key(result.account.username));
+                    result.profile = new MinecraftSkinApi.Profile();
+                    for (MinecraftSkinApi.Cape cape : LocalCapes.list()) {
+                        cape.active = cape.id.equals(selectedCape);
+                        try {
+                            result.capeTextures.put(cape.id, LocalCapes.texture(appCtx, cape.id));
+                            result.profile.capes.add(cape);
+                        } catch (Exception ignored) {
+                            // A cape file that cannot be read is simply left out
+                        }
+                    }
                 } else {
                     loadInBackground(result, seedName);
                 }"""),
-    ("        if (result.account != null) mAccount = result.account;\n        mLoaded = true;\n",
-     """        if (result.account != null) mAccount = result.account;
-        mLoaded = true;
-        if (mAccount != null && mAccount.authType == AuthType.LOCAL && getView() != null) {
-            // Capes belong to a Minecraft profile, a local account has none
-            View capesTab = getView().findViewById(R.id.skin_tab_capes);
-            if (capesTab != null) capesTab.setVisibility(View.GONE);
-        }
-"""),
     ("""                fresh = MinecraftSkinApi.ensureFreshSession(account);
                 byte[] skinBytes = SkinLibrary.readBytes(entry);
                 MinecraftSkinApi.uploadSkin(fresh.accessToken, skinBytes, slim);
@@ -86,6 +103,118 @@ patch(os.path.join(java, "skins", "SkinEditorFragment.java"), [
                     MinecraftSkinApi.uploadSkin(fresh.accessToken, skinBytes, slim);
                     SkinLibrary.setSelected(fresh.profileId, skinId);
                 }"""),
+    # choosing a cape: local accounts only remember it, no network
+    ("        final Account account = mAccount;\n        beginBusy();\n        MojoApplication.sExecutorService.execute(() -> {\n"
+     "            Account fresh = account;\n            Throwable error = null;\n            try {\n"
+     "                fresh = MinecraftSkinApi.ensureFreshSession(account);\n                MinecraftSkinApi.setActiveCape",
+     "        if (mAccount.authType == AuthType.LOCAL) {\n"
+     "            try {\n"
+     "                SkinLibrary.setSelected(LocalCapes.key(mAccount.username), newId);\n"
+     "            } catch (IOException e) {\n"
+     "                showError(e);\n"
+     "            }\n"
+     "            Toast.makeText(requireContext(),\n"
+     "                    newId == null ? R.string.skin_editor_cape_removed : R.string.skin_editor_cape_applied,\n"
+     "                    Toast.LENGTH_SHORT).show();\n"
+     "            return;\n"
+     "        }\n"
+     "        final Account account = mAccount;\n        beginBusy();\n        MojoApplication.sExecutorService.execute(() -> {\n"
+     "            Account fresh = account;\n            Throwable error = null;\n            try {\n"
+     "                fresh = MinecraftSkinApi.ensureFreshSession(account);\n                MinecraftSkinApi.setActiveCape"),
+    # the cape tab of a local account gets an \"add\" tile after the last cape, custom capes can be deleted with a long press
+    ("            return (mTab == TAB_SKINS ? mSkins.size() : mCapes.size()) + 1;",
+     "            return (mTab == TAB_SKINS ? mSkins.size() : mCapes.size()) + 1 + (mTab == TAB_CAPES && isLocalAccount() ? 1 : 0);"),
+    ("                tile.setOnClickListener(v -> onCapeTileClicked(null));\n                return;\n            }\n",
+     "                tile.setOnClickListener(v -> onCapeTileClicked(null));\n                return;\n            }\n"
+     "            if (isLocalAccount() && position == mCapes.size() + 1) {\n"
+     "                holder.image.setImageResource(R.drawable.ic_add);\n"
+     "                tile.setContentDescription(getString(R.string.blockcomet_add_cape));\n"
+     "                tile.setOnClickListener(v -> {\n"
+     "                    if (mBusy == 0) mPickCape.launch(\"image/*\");\n"
+     "                });\n"
+     "                return;\n"
+     "            }\n"),
+    ("            tile.setOnClickListener(v -> onCapeTileClicked(cape));\n",
+     "            tile.setOnClickListener(v -> onCapeTileClicked(cape));\n"
+     "            if (isLocalAccount() && LocalCapes.isCustom(cape.id)) {\n"
+     "                tile.setOnLongClickListener(v -> {\n"
+     "                    confirmDeleteCape(cape);\n"
+     "                    return true;\n"
+     "                });\n"
+     "            }\n"),
+    ("    // ------------------------------------------------------------------ capes\n",
+     """    // ------------------------------------------------------------------ local capes
+
+    private boolean isLocalAccount() {
+        return mAccount != null && mAccount.authType == AuthType.LOCAL;
+    }
+
+    private void onCapePicked(@Nullable Uri uri) {
+        if (uri == null || !isLocalAccount()) return;
+        final Context appContext = requireContext().getApplicationContext();
+        beginBusy();
+        MojoApplication.sExecutorService.execute(() -> {
+            MinecraftSkinApi.Cape added = null;
+            Bitmap texture = null;
+            Throwable error = null;
+            boolean invalid = false;
+            try {
+                byte[] data = readLimited(appContext, uri);
+                Bitmap bitmap = isPng(data) ? BitmapFactory.decodeByteArray(data, 0, data.length) : null;
+                if (bitmap == null || !LocalCapes.isValidSize(bitmap.getWidth(), bitmap.getHeight())) {
+                    invalid = true;
+                } else {
+                    added = LocalCapes.add(data);
+                    texture = SkinTextures.normalizeCape(bitmap);
+                }
+            } catch (Exception e) {
+                error = e;
+            }
+            final MinecraftSkinApi.Cape finalAdded = added;
+            final Bitmap finalTexture = texture;
+            final Throwable finalError = error;
+            final boolean finalInvalid = invalid;
+            runIfAttached(() -> {
+                endBusy();
+                if (finalInvalid) {
+                    Toast.makeText(requireContext(), R.string.blockcomet_invalid_cape, Toast.LENGTH_LONG).show();
+                } else if (finalError != null) {
+                    showError(finalError);
+                } else if (finalAdded != null) {
+                    mCapes.add(finalAdded);
+                    mCapeTextures.put(finalAdded.id, finalTexture);
+                    mAdapter.notifyDataSetChanged();
+                    // A new cape is worn right away, like any other tile that gets tapped
+                    onCapeTileClicked(finalAdded);
+                }
+            });
+        });
+    }
+
+    private void confirmDeleteCape(@NonNull MinecraftSkinApi.Cape cape) {
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.blockcomet_delete_cape_title)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.global_delete, (dialog, which) -> {
+                    try {
+                        LocalCapes.delete(cape.id);
+                        if (cape.id.equals(mSelectedCapeId)) {
+                            SkinLibrary.setSelected(LocalCapes.key(mAccount.username), null);
+                            mSelectedCapeId = null;
+                            mPreview.setCape(null);
+                        }
+                        mCapes.remove(cape);
+                        mCapeTextures.remove(cape.id);
+                        mAdapter.notifyDataSetChanged();
+                    } catch (IOException e) {
+                        showError(e);
+                    }
+                })
+                .show();
+    }
+
+    // ------------------------------------------------------------------ capes
+"""),
 ])
 
 # ---- Game start: bundled mods follow the settings switch, local skin is put in place -----------------------------
@@ -95,7 +224,7 @@ patch(os.path.join(java, "utils", "jre", "GameRunner.java"), [(
     "        if (git.artdeell.mojo.tasks.AsyncAssetManager.getBundledVersionIds().contains(instance.versionId)) {\n"
     "            git.artdeell.mojo.tasks.AsyncAssetManager.installBundledMods(instance); // honours \"Download performance mods\"\n"
     "        }\n"
-    "        git.artdeell.mojo.skins.LocalSkins.install(account, instance);\n"
+    "        git.artdeell.mojo.skins.LocalSkins.install(activity, account, instance);\n"
     "        JVersionList.Version versionInfo = Tools.getVersionInfo(versionId);")])
 
 # ---- Settings switch + texts ---------------------------------------------------------------------------------------
@@ -111,12 +240,18 @@ patch(os.path.join(res, "xml", "pref_misc.xml"), [(
 
 en = '''<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="blockcomet_add_cape">Add a cape</string>
+    <string name="blockcomet_invalid_cape">The image must be a PNG cape texture (64x32, or the same layout at 2x, 4x...)</string>
+    <string name="blockcomet_delete_cape_title">Delete this cape?</string>
     <string name="blockcomet_perf_mods_title">Download performance mods</string>
     <string name="blockcomet_perf_mods_desc">Add FerriteCore, Lithium, ModernFix, Krypton, Noisium, MemoryLeakFix and ScalableLux to the Meteor instances the next time a game starts. Off by default: nothing is added without your permission, and turning it off never removes mods you already have.</string>
 </resources>
 '''
 ar = '''<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="blockcomet_add_cape">إضافة وشاح</string>
+    <string name="blockcomet_invalid_cape">لازم تكون الصورة PNG بتنسيق الوشاح (64x32، أو نفس التنسيق بحجم مضاعف)</string>
+    <string name="blockcomet_delete_cape_title">حذف هذا الوشاح؟</string>
     <string name="blockcomet_perf_mods_title">تنزيل مودات الأداء</string>
     <string name="blockcomet_perf_mods_desc">يضيف FerriteCore وLithium وModernFix وKrypton وNoisium وMemoryLeakFix وScalableLux إلى نسخ Meteor عند تشغيل اللعبة المرة القادمة. معطّل افتراضيًا: لا يُضاف أي مود بدون إذنك، وإيقافه لا يحذف مودات موجودة عندك.</string>
 </resources>
