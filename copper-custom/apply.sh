@@ -560,6 +560,7 @@ python3 "$HERE/translate_ar.py" "$RES"
 
 # 12b. Skins for local accounts, and performance mods only when the user turns them on
 python3 "$HERE/localskin.py" "$RES" "$JAVA" "$HERE"
+python3 "$HERE/uipolish.py" "$RES" "$JAVA"
 
 # 13. Right-to-left layouts (icons and text mirrored in Arabic instead of Arabic text inside a left-to-right layout)
 if ! grep -q 'android:supportsRtl' "$MANIFEST"; then
