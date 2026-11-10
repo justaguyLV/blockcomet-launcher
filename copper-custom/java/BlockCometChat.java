@@ -8,10 +8,13 @@ public final class BlockCometChat {
     private static final String PREFS = "blockcomet_chat";
     private static final String KEY_SERVER_URL = "server_url";
 
+    /** Built-in PocketBase server, so the chat works out of the box with no setup. */
+    private static final String DEFAULT_SERVER_URL = "https://hundred-feature.pockethost.io";
+
     private BlockCometChat() {}
 
     public static String getServerUrl(Context context) {
-        return prefs(context).getString(KEY_SERVER_URL, "");
+        return prefs(context).getString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
     }
 
     public static void setServerUrl(Context context, String url) {

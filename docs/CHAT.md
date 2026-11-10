@@ -31,6 +31,18 @@ free allowance can run the official `ghcr.io/muchobien/pocketbase` Docker image;
 Fly.io requires a card on file even for its free allowance; Render's free web tier does not, but its disk is not
 persistent (chat history resets on redeploy) unless you add a paid persistent disk.
 
+## Backup (in case the server ever resets or gets deleted)
+
+The chat header has two buttons:
+- **💾 Save backup** — exports your friends list and all your messages to a `.json` file, saved straight to the
+  device's Downloads folder (so it survives even if the app itself is uninstalled).
+- **📂 Restore backup** — pick a previously saved file; it re-creates your friends (matched by username on
+  whatever server you're currently connected to) and re-posts your messages. Anyone not registered on the
+  current server yet is listed as skipped so you know who to tell to sign up first.
+
+This is a manual safety net, not automatic syncing — if you're on a free host that can wipe its data, get in the
+habit of tapping 💾 every so often.
+
 ## What's not done yet: direct join
 
 Right now tapping a "Join" invite just copies the address to the clipboard — you still open Multiplayer and

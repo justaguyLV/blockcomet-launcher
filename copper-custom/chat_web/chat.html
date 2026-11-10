@@ -32,12 +32,19 @@
 </head>
 <body>
 
-<header>BlockComet Chat</header>
+<header>BlockComet Chat
+  <span style="float:right;display:flex;gap:10px">
+    <span onclick="restoreBackup()" style="cursor:pointer" title="Restore from backup file">📂</span>
+    <span onclick="downloadBackup()" style="cursor:pointer" title="Save a backup file (friends + messages)">💾</span>
+    <span onclick="toggleSetup()" style="cursor:pointer" title="Change server">⚙️</span>
+  </span>
+</header>
+<input id="restoreFile" type="file" accept="application/json" style="display:none" onchange="doRestore(this.files[0])">
 
-<div id="setup">
-  <div class="muted">Enter your PocketBase server URL (ask whoever runs your friend group's server, or deploy your own -- see docs/CHAT.md).</div>
+<div id="setup" style="display:none">
+  <div class="muted">Only needed if you want your own server instead of the built-in one (see docs/CHAT.md).</div>
   <input id="serverUrl" placeholder="https://your-server.example.com">
-  <button onclick="saveServerUrl()">Continue</button>
+  <button onclick="saveServerUrl()">Save &amp; continue</button>
 </div>
 
 <div id="auth" style="display:none">
@@ -186,14 +193,107 @@ function sendInviteDialog(){
   pb.collection('messages').create({ from: me.id, to: activeFriend.id, body: 'Join my server', type: 'invite', invite_host: host, invite_port: port });
 }
 
-// On load: restore any server URL already saved from a previous session
+// ---- Backup / restore -------------------------------------------------------------------------------------
+// Keeps your friends + messages safe in a local file, in case the server ever gets reset or deleted.
+async function downloadBackup(){
+  if(!me){ alert('Log in first.'); return; }
+  const friends = await pb.collection('friends').getFullList({ filter: `requester="${me.id}" || addressee="${me.id}"`, expand: 'requester,addressee' });
+  const messages = await pb.collection('messages').getFullList({ filter: `from="${me.id}" || to="${me.id}"`, sort: 'created' });
+  const backup = {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    me: { username: me.username },
+    friends: friends.map(f => ({
+      me_role: f.requester === me.id ? 'requester' : 'addressee',
+      other_username: (f.requester === me.id ? f.expand.addressee : f.expand.requester)?.username,
+      status: f.status
+    })),
+    messages: messages.map(m => ({
+      direction: m.from === me.id ? 'sent' : 'received',
+      other_username: null, // filled in below
+      from_id: m.from, to_id: m.to,
+      body: m.body, type: m.type, invite_host: m.invite_host, invite_port: m.invite_port,
+      created: m.created
+    }))
+  };
+  // resolve the "other" username for each message from the friends list we already fetched
+  const idToName = {};
+  for(const f of friends){
+    if(f.expand.requester) idToName[f.expand.requester.id] = f.expand.requester.username;
+    if(f.expand.addressee) idToName[f.expand.addressee.id] = f.expand.addressee.username;
+  }
+  backup.messages.forEach(m => { m.other_username = idToName[m.direction === 'sent' ? m.to_id : m.from_id] || null; delete m.from_id; delete m.to_id; });
+
+  const filename = 'blockcomet-chat-backup-' + me.username + '-' + new Date().toISOString().slice(0,10) + '.json';
+  const json = JSON.stringify(backup, null, 2);
+  if(window.AndroidChat && AndroidChat.saveBackupFile){
+    AndroidChat.saveBackupFile(filename, json); // saved to the device's Downloads folder
+  } else {
+    const blob = new Blob([json], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+  }
+}
+
+function restoreBackup(){
+  if(window.AndroidChat && AndroidChat.pickBackupFile){
+    AndroidChat.pickBackupFile(); // opens the system picker; result comes back via window.onBackupFilePicked
+  } else {
+    document.getElementById('restoreFile').click();
+  }
+}
+
+// Android calls this once the user picks a file in the system file picker
+window.onBackupFilePicked = function(jsonText){
+  doRestore(null, jsonText);
+};
+
+async function doRestore(file, jsonTextFromAndroid){
+  if(!me){ alert('Log in first.'); return; }
+  const data = JSON.parse(jsonTextFromAndroid !== undefined ? jsonTextFromAndroid : await file.text());
+  if(data.version !== 1){ alert('Unrecognized backup file.'); return; }
+  let restoredFriends = 0, restoredMessages = 0, skipped = [];
+  for(const f of data.friends || []){
+    const target = await pb.collection('users').getFirstListItem('username="'+f.other_username+'"').catch(()=>null);
+    if(!target){ skipped.push(f.other_username); continue; }
+    const exists = await pb.collection('friends').getFirstListItem(
+      `(requester="${me.id}" && addressee="${target.id}") || (requester="${target.id}" && addressee="${me.id}")`
+    ).catch(()=>null);
+    if(!exists){
+      await pb.collection('friends').create({ requester: me.id, addressee: target.id, status: f.status || 'accepted' });
+      restoredFriends++;
+    }
+  }
+  for(const m of data.messages || []){
+    const other = await pb.collection('users').getFirstListItem('username="'+m.other_username+'"').catch(()=>null);
+    if(!other) continue;
+    const from = m.direction === 'sent' ? me.id : other.id;
+    const to = m.direction === 'sent' ? other.id : me.id;
+    await pb.collection('messages').create({ from, to, body: m.body, type: m.type, invite_host: m.invite_host, invite_port: m.invite_port });
+    restoredMessages++;
+  }
+  alert(`Restored ${restoredFriends} friend(s) and ${restoredMessages} message(s).` +
+        (skipped.length ? `\nSkipped (not registered on this server yet): ${skipped.join(', ')}` : ''));
+  loadFriends();
+}
+
+function toggleSetup(){
+  const el = document.getElementById('setup');
+  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+
+// On load: the launcher always has a server URL (built-in default, or one the user saved before) -- go straight to login
 (function(){
-  const saved = window.AndroidChat ? AndroidChat.getServerUrl() : '';
-  if(saved){
-    document.getElementById('serverUrl').value = saved;
-    initPb(saved);
-    document.getElementById('setup').style.display = 'none';
+  const url = window.AndroidChat ? AndroidChat.getServerUrl() : '';
+  document.getElementById('serverUrl').value = url;
+  if(url){
+    initPb(url);
     document.getElementById('auth').style.display = 'flex';
+  } else {
+    // only reachable outside the app (plain browser preview), where there's no built-in default
+    document.getElementById('setup').style.display = 'flex';
   }
 })();
 </script>
